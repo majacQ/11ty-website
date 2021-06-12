@@ -45,6 +45,13 @@
   },
   "devDependencies": {
     "@11ty/eleventy": "^0.12.1",
+  <<<<<<< v0-12-1
+    "@11ty/eleventy-cache-assets": "^2.0.2",
+    "@11ty/eleventy-img": "^0.2.5",
+    "@11ty/eleventy-navigation": "0.1.5",
+    "@11ty/eleventy-plugin-rss": "1.0.7",
+    "@11ty/eleventy-plugin-syntaxhighlight": "3.0.1",
+  =======
     "@11ty/eleventy-cache-assets": "^2.1.0",
     "@11ty/eleventy-img": "^0.8.3",
     "@11ty/eleventy-navigation": "^0.1.6",
@@ -52,6 +59,7 @@
     "@11ty/eleventy-plugin-syntaxhighlight": "^3.1.0",
     "@netlify/functions": "^0.4.1",
     "chrome-aws-lambda": "^8.0.0",
+  >>>>>>> fns-demo-redirect
     "clean-css": "4.2.3",
     "comma-number": "2.0.1",
     "dotenv": "8.2.0",
