@@ -9,48 +9,78 @@ const fs = require("fs-extra");
 const syntaxHighlightPlugin = require("@11ty/eleventy-plugin-syntaxhighlight");
 const navigationPlugin = require("@11ty/eleventy-navigation");
 const rssPlugin = require("@11ty/eleventy-plugin-rss");
+const eleventyImage = require("@11ty/eleventy-img");
 const monthDiffPlugin = require("./config/monthDiff");
 const addedInLocalPlugin = require("./config/addedin");
 const minificationLocalPlugin = require("./config/minification");
 const getAuthors = require("./config/getAuthorsFromSites");
 const cleanName = require("./config/cleanAuthorName");
 const objectHas = require("./config/object-has");
+const lodashGet = require("lodash/get");
 
 // Load yaml from Prism to highlight frontmatter
 loadLanguages(['yaml']);
 
-let defaultAvatarHtml = `<img src="/img/default-avatar.png" alt="Default Avatar" loading="lazy" class="avatar">`;
+let defaultAvatarHtml = `<img src="/img/default-avatar.png" alt="Default Avatar" loading="lazy" decoding="async" class="avatar" width="200" height="200">`;
 const shortcodes = {
-	avatarlocalcache: function(datasource, slug, alt = "") {
+	avatar: function(datasource, slug, alt = "") {
 		if(!slug) {
 			return defaultAvatarHtml;
 		}
 
 		slug = cleanName(slug).toLowerCase();
-		let mapEntry;
+
 		try {
-			mapEntry = require(`./avatars/${datasource}/${slug}.json`);
+			let mapEntry = Object.assign({}, require(`./avatars/${datasource}/${slug}.json`));
+			delete mapEntry.slug; // dunno why the slug is saved here ok bye
+
+			return eleventyImage.generateHTML(mapEntry, {
+				alt: `${alt || `${slug}’s ${datasource} avatar`}`,
+				loading: "lazy",
+				decoding: "async",
+				class: "avatar",
+			});
 		} catch(e) {
 			return defaultAvatarHtml;
 		}
-
-		let ret = [];
-		if(mapEntry.webp) {
-			ret.push("<picture>");
-			ret.push(`<source srcset="${mapEntry.webp[0].srcset}" type="${mapEntry.webp[0].sourceType}">`);
-		}
-		let otherSrc = mapEntry.jpeg || mapEntry.png;
-
-		ret.push(`<img src="${otherSrc[0].url}" alt="${alt || `${slug}’s ${datasource} avatar`}" loading="lazy" class="avatar">`);
-		if(mapEntry.webp) {
-			ret.push("</picture>");
-		}
-		return ret.join("");
 	},
 	link: function(linkUrl, content) {
 		return (linkUrl ? `<a href="${linkUrl}">` : "") +
 			content +
 			(linkUrl ? `</a>` : "");
+	},
+	getScreenshotHtml: function(siteSlug, siteUrl, cls, sizes) {
+		// TODO revert to use the code that routed through /api/image/ postprocessing
+		let withJs = true;
+		let viewport = {
+			width: 420,
+			height: 580,
+		};
+
+		// TODO change this to master or something
+		let localhostEnv = "https://fns-demo-redirect--11ty.netlify.app";
+		let env = !process.env.DEPLOY_PRIME_URL ? localhostEnv : "";
+		let screenshotPath = `/api/screenshot/${encodeURIComponent(siteUrl)}/${viewport.width}x${viewport.height}/`;
+		let screenshotUrl = `${env}${screenshotPath}`;
+
+		let options = {
+			formats: ["jpeg"], // we don’t use AVIF here because it was a little too slow!
+			widths: [null], // 260-440 in layout
+			urlFormat: function() {
+				return screenshotUrl;
+			}
+		};
+
+		let stats = eleventyImage.statsByDimensionsSync(screenshotUrl, viewport.width, viewport.height, options);
+
+		return eleventyImage.generateHTML(stats, {
+			alt: `Screenshot of ${siteUrl}`,
+			loading: "lazy",
+			decoding: "async",
+			sizes: sizes || "(min-width: 22em) 30vw, 100vw",
+			class: cls !== undefined ? cls : "sites-screenshot",
+			onerror: "let p=this.closest('picture');if(p){p.remove();}this.remove();"
+		});
 	}
 };
 
@@ -77,6 +107,7 @@ module.exports = function(eleventyConfig) {
 			});
 		}
 	});
+
 	eleventyConfig.addPlugin(rssPlugin);
 	eleventyConfig.addPlugin(navigationPlugin);
 	eleventyConfig.addPlugin(addedInLocalPlugin);
@@ -102,7 +133,8 @@ module.exports = function(eleventyConfig) {
 			(alt ? `<span class="sr-only">${alt}</span>` : "");
 	});
 
-	eleventyConfig.addShortcode("avatarlocalcache", shortcodes.avatarlocalcache);
+	eleventyConfig.addShortcode("avatarlocalcache", shortcodes.avatar);
+	eleventyConfig.addShortcode("getScreenshotHtml", shortcodes.getScreenshotHtml);
 
 	eleventyConfig.addShortcode("codetitle", function(title, heading = "Filename") {
 		return `<div class="codetitle codetitle-left"><b>${heading} </b>${title}</div>`;
@@ -140,8 +172,9 @@ ${text.trim()}
 
 	eleventyConfig.addPassthroughCopy("_redirects");
 	eleventyConfig.addPassthroughCopy("netlify-email");
-	eleventyConfig.addPassthroughCopy("css/fonts");
+	// eleventyConfig.addPassthroughCopy("css/fonts"); // these are inline now
 	eleventyConfig.addPassthroughCopy("img");
+	eleventyConfig.addPassthroughCopy("news/*.png");
 	eleventyConfig.addPassthroughCopy("favicon.ico");
 
 	eleventyConfig.addFilter("findHash", function(speedlifyUrls, ...urls) {
@@ -271,7 +304,11 @@ ${text.trim()}
 	});
 
 	eleventyConfig.addShortcode("testimonial", function(testimonial) {
-		return `<blockquote><p>${!testimonial.indirect ? `“` : ``}${testimonial.text}${!testimonial.indirect ? `” <span class="bio-source">—${shortcodes.link(testimonial.source, shortcodes.avatarlocalcache("twitter", testimonial.twitter, `${testimonial.name}’s Twitter Photo`) + testimonial.name)}</span>` : ``}</p></blockquote>`;
+		return `<blockquote><p>${!testimonial.indirect ? `“` : ``}${testimonial.text}${!testimonial.indirect ? `” <span class="bio-source">—${shortcodes.link(testimonial.source, shortcodes.avatar("twitter", testimonial.twitter, `${testimonial.name}’s Twitter Photo`) + testimonial.name)}</span>` : ``}</p></blockquote>`;
+	});
+
+	eleventyConfig.addFilter("isBusinessPerson", function(supporter) {
+		return supporter && supporter.isMonthly && supporter.amount && supporter.amount.value >= 5;
 	});
 
 	eleventyConfig.addShortcode("supporterAmount", function(amount, maxAmount = 2000) {
@@ -338,7 +375,9 @@ ${text.trim()}
 	eleventyConfig.setLibrary("md", mdIt);
 
 	eleventyConfig.addFilter("newsDate", (dateObj, format = "yyyy LLLL dd") => {
-		if(typeof dateObj === "number") {
+		if(typeof dateObj === "string") {
+			return DateTime.fromISO(dateObj).toFormat(format);
+		} else if(typeof dateObj === "number") {
 			dateObj = new Date(dateObj);
 		}
 		return DateTime.fromJSDate(dateObj).toFormat(format);
@@ -404,14 +443,19 @@ ${text.trim()}
 		}
 	});
 
-	eleventyConfig.addFilter("findBy", (data, key, value) => {
+	eleventyConfig.addFilter("findBy", (data, path, value) => {
 		return data.filter(entry => {
-			if(!key || !value || !entry[key]) {
+			if(!path || !value) {
+				return false;
+			}
+
+			let gotten = lodashGet(entry, path);
+			if(!gotten) {
 				return false;
 			}
 
 			let valueLower = value.toLowerCase();
-			let dataLower = entry[key].toLowerCase();
+			let dataLower = gotten.toLowerCase();
 			if(valueLower === dataLower) {
 				return true;
 			}
@@ -486,7 +530,7 @@ ${text.trim()}
 	});
 
 	eleventyConfig.addFilter("supportersFacepile", (supporters) => {
-		return supporters.filter(supporter => supporter.role === "BACKER" && supporter.tier && supporter.isActive && supporter.tier != "Gold Sponsor");
+		return supporters.filter(supporter => supporter.status === 'ACTIVE' && !supporter.hasDefaultAvatar && supporter.tier && supporter.tier.slug !== "gold-sponsor");
 	});
 
 	// Sort an object that has `order` props in values. Return an array
@@ -514,7 +558,7 @@ ${text.trim()}
 			} else {
 				html.push(`<span class="nowrap">`);
 			}
-			html.push(shortcodes.avatarlocalcache("twitter", name, name));
+			html.push(shortcodes.avatar("twitter", name, name));
 			html.push(name);
 			if(isAuthor) {
 				html.push("</a>");

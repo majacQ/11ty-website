@@ -39,6 +39,24 @@ table .elv-callout {
 		background-color: hsl(195, 100%, 22%);
 	}
 }
+/* Error */
+.elv-callout-error {
+	background-color: hsl(0, 100%, 80%);
+}
+.elv-callout-error:before {
+	content: "⛔️ ";
+}
+.elv-callout-error code {
+	background-color: hsl(0, 100%, 70%);
+}
+@media (prefers-color-scheme: dark) {
+	.elv-callout-error {
+		background-color: hsl(0, 100%, 12%);
+	}
+	.elv-callout-error code {
+		background-color: hsl(0, 100%, 22%);
+	}
+}
 /* Warning */
 .elv-callout-warn {
 	background-color: hsl(60, 100%, 83%);
@@ -73,6 +91,10 @@ table .elv-callout {
 }
 .elv-callout:first-child {
 	margin-top: 0;
+}
+.elv-callout > ul:last-child,
+.elv-callout > ol:last-child {
+	margin-bottom: 0;
 }
 body > .elv-callout {
 	margin-left: 0;

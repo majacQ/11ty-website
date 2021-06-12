@@ -1,12 +1,18 @@
 ---
+pageTitle: Collections (Using Tags)
 eleventyNavigation:
   parent: Working with Templates
   key: Collections
   order: 2
   excerpt: Group, reuse, and sort content in interesting ways.
+communityLinks:
+- url: https://www.pborenstein.com/posts/collections/
+  author: pborenstein
+  title: Working with Collections
+- url: https://darekkay.com/blog/eleventy-group-posts-by-year/
+  author: darek_kay
+  title: Group posts by year
 ---
-# Collections (using Tags)
-
 While [pagination](/docs/pagination/) allows you to iterate over a data set to create multiple templates, a collection allows you to group content in interesting ways. A piece of content can be a part of multiple collections, if you assign the same string value to the `tags` key in the front matter.
 
 ## A Blog Example
@@ -40,10 +46,10 @@ This will place this `mypost.md` into the `post` collection with all other piece
 
 {% raw %}
 ```js
-module.exports = function({collections}) {
+exports.render = function(data) {
   return `<ul>
-${collections.post.map((post) => `<li>${ post.data.title }</li>`).join("\n")}
-</ul>`;
+    ${data.collections.post.map(post => `<li>${post.data.title}</li>`).join("\n")}
+  </ul>`;
 };
 ```
 {% endraw %}
@@ -61,16 +67,32 @@ Compare the `post.url` and special Eleventy-provided `page.url` variable to find
   <li{% if page.url == post.url %} aria-current="page"{% endif %}>{{ post.data.title }}</li>
 {%- endfor -%}
 </ul>
-
-Background: `aria-current="page"` tells assistive technology, such as screen readers, which page of a set of pages is the current active one. It also provides a hook for your CSS styling, using its attribute selector: `[aria-current="page"] {}`.
 ```
 {% endraw %}
+
+{% codetitle "JavaScript .11ty.js", "Syntax" %}
+
+{% raw %}
+```js
+exports.render = function(data) {
+  return `<ul>
+    ${data.collections.post.map(post =>
+      `<li${data.page.url === post.url ? `class="active"` : ""}>${post.data.title}</li>`
+    ).join("\n");}
+  </ul>`;
+};
+```
+{% endraw %}
+
+Background: `aria-current="page"` tells assistive technology, such as screen readers, which page of a set of pages is the current active one. It also provides a hook for your CSS styling, using its attribute selector: `[aria-current="page"] {}`.
 
 ## The Special `all` Collection
 
 By default Eleventy puts all of your content (independent of whether or not it has any assigned tags) into the `collections.all` Collection. This allows you to iterate over all of your content inside of a template.
 
 ### Example: A list of links to all Eleventy generated content
+
+{% codetitle "Liquid, Nunjucks", "Syntax" %}
 
 {% raw %}
 ```html
@@ -79,6 +101,20 @@ By default Eleventy puts all of your content (independent of whether or not it h
   <li><a href="{{ post.url }}">{{ post.url }}</a></li>
 {%- endfor -%}
 </ul>
+```
+{% endraw %}
+
+{% codetitle "JavaScript .11ty.js", "Syntax" %}
+
+{% raw %}
+```js
+exports.render = function(data) {
+  return `<ul>
+    ${data.collections.post.map(post =>
+      `<li><a href="${post.url}">${post.url}</a></li>`
+    ).join("\n");}
+  </ul>`;
+};
 ```
 {% endraw %}
 
@@ -143,6 +179,18 @@ This content would show up in the template data inside of `collections.cat` and 
   <li>{{ post.data.title }}</li>
 {%- endfor -%}
 </ul>
+```
+{% endraw %}
+
+{% codetitle "JavaScript .11ty.js", "Syntax" %}
+
+{% raw %}
+```js
+exports.render = function(data) {
+  return `<ul>
+    ${data.collections.post.map(post => `<li>${post.data.title}</li>`).join("\n");}
+  </ul>`;
+};
 ```
 {% endraw %}
 
@@ -213,13 +261,27 @@ And in Liquid it’d look like this:
 {% raw %}
 ```html
 <ul>
-{%- for post in collections.post reversed -%}
+{%- for post in collections.post reverse -%}
   <li>{{ post.data.title }}</li>
 {%- endfor -%}
 </ul>
 ```
 {% endraw %}
 
+And in JavaScript it’d look like this:
+
+{% codetitle "JavaScript .11ty.js", "Syntax" %}
+
+{% raw %}
+```js
+exports.render = function(data) {
+  let posts = data.collections.post.reverse();
+  return `<ul>
+    ${posts.map(post => `<li>${post.data.title}</li>`).join("\n");}
+  </ul>`;
+};
+```
+{% endraw %}
 
 <div class="elv-callout elv-callout-warn elv-callout-warn-block" id="array-reverse">
   <p>You should <em><strong>not</strong></em> use Array <code>reverse()</code> on collection arrays in your templates, like so:</p>
@@ -250,7 +312,7 @@ Inside of your `.eleventy.js` config file, use the first argument to the config 
 ```js
 module.exports = function(eleventyConfig) {
   // API is available in `eleventyConfig` argument
-  
+
   return {
     // your normal config options
     markdownTemplateEngine: "njk"
@@ -320,7 +382,10 @@ module.exports = function(eleventyConfig) {
   // Sort with `Array.sort`
   eleventyConfig.addCollection("myCustomSort", function(collectionApi) {
     return collectionApi.getAll().sort(function(a, b) {
-      return b.date - a.date;
+      //return a.date - b.date; // sort by date - ascending
+      return b.date - a.date; // sort by date - descending
+      //return a.inputPath.localeCompare(b.inputPath); // sort by path - ascending
+      //return b.inputPath.localeCompare(a.inputPath); // sort by path - descending
     });
   });
 };
@@ -453,12 +518,3 @@ module.exports = function(eleventyConfig) {
   });
 };
 ```
-
-<div class="elv-community" id="community-resources">
-  {% callout "info" %}
-  <h3 class="elv-community-hed">Community Resources</h3>
-  <ul>
-    <li><a href="https://www.pborenstein.com/posts/collections/">Working with Collections</a> by {% avatarlocalcache "twitter", "pborenstein" %}Philip Borenstein</li>
-  </ul>
-  {% endcallout %}
-</div>
