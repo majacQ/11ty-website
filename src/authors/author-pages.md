@@ -4,12 +4,14 @@ pagination:
   size: 1
   resolve: values
   alias: author
-  cloud: eleventy.cloud.path.name
+  serverless: eleventy.serverless.path.name
+  # addAllPagesToCollections: true
 permalink:
-  cloud: "/authors/:name/"
+  serverless: "/authors/:name/"
 
 eleventyNavigation:
   parent: Eleventy Authors
+excludeFromSearch: true
 excludeFromSidebar: true
 layout: layouts/docs.njk
 css:

@@ -1,4 +1,3 @@
-const path = require("path");
 const { DateTime } = require("luxon");
 const HumanReadable = require("human-readable-numbers");
 const commaNumber = require("comma-number");
@@ -11,11 +10,11 @@ const shortHash = require("short-hash");
 const markdownItAnchor = require("markdown-it-anchor");
 const markdownItToc = require("markdown-it-table-of-contents");
 
+const { EleventyServerlessBundlerPlugin } = require("@11ty/eleventy");
 const syntaxHighlightPlugin = require("@11ty/eleventy-plugin-syntaxhighlight");
 const navigationPlugin = require("@11ty/eleventy-navigation");
 const rssPlugin = require("@11ty/eleventy-plugin-rss");
 const eleventyImage = require("@11ty/eleventy-img");
-const dependencyTree = require("@11ty/dependency-tree");
 
 const monthDiffPlugin = require("./config/monthDiff");
 const addedInLocalPlugin = require("./config/addedin");
@@ -55,19 +54,25 @@ const shortcodes = {
 			content +
 			(linkUrl ? `</a>` : "");
 	},
-	getScreenshotHtml: function(siteSlug, siteUrl, cls, sizes) {
-		// TODO revert to use the code that routed through /api/image/ postprocessing
+	getScreenshotHtml: function(siteSlug, siteUrl, sizes) {
 		let withJs = true;
 		let viewport = {
 			width: 420,
-			height: 580,
+			height: 460,
 		};
 
 		// TODO change this to master or something
-		let localhostEnv = "https://fns-demo-cloud--11ty.netlify.app";
-		let env = !process.env.DEPLOY_PRIME_URL ? localhostEnv : "";
+		let localhostEnv = "https://demo-serverless--11ty.netlify.app";
+		let forcedHost = !process.env.DEPLOY_PRIME_URL && !process.env.AWS_LAMBDA_FUNCTION_NAME ? localhostEnv : "";
 		let screenshotPath = `/api/screenshot/${encodeURIComponent(siteUrl)}/${viewport.width}x${viewport.height}/`;
-		let screenshotUrl = `${env}${screenshotPath}`;
+		if(siteSlug === "11ty" || siteSlug === "foursquare") {
+			if(fs.pathExistsSync(`./src/img/screenshot-fallbacks/${siteSlug}.jpg`)) {
+				forcedHost = "";
+				screenshotPath = `/img/screenshot-fallbacks/${siteSlug}.jpg`;
+			}
+		}
+
+		let screenshotUrl = `${forcedHost}${screenshotPath}`;
 
 		let options = {
 			formats: ["jpeg"], // we don’t use AVIF here because it was a little too slow!
@@ -84,7 +89,7 @@ const shortcodes = {
 			loading: "lazy",
 			decoding: "async",
 			sizes: sizes || "(min-width: 22em) 30vw, 100vw",
-			class: cls !== undefined ? cls : "sites-screenshot",
+			class: "sites-screenshot",
 			onerror: "let p=this.closest('picture');if(p){p.remove();}this.remove();"
 		});
 	}
@@ -119,6 +124,18 @@ module.exports = function(eleventyConfig) {
 	eleventyConfig.addPlugin(addedInLocalPlugin);
 	eleventyConfig.addPlugin(monthDiffPlugin);
 	eleventyConfig.addPlugin(minificationLocalPlugin);
+	eleventyConfig.addPlugin(EleventyServerlessBundlerPlugin, {
+		name: "serverless",
+		functionsDir: "./netlify/functions/",
+		copy: [
+			"config/",
+			"avatars/",
+			"src/img/logo.svg",
+			"src/img/gift.svg",
+			"_generated-serverless-collections.json",
+			{ from: ".cache/eleventy-cache-assets/", to: "cache" },
+		]
+	});
 
 	eleventyConfig.addCollection("sidebarNav", function(collection) {
 		// filter out excludeFromSidebar options
@@ -200,7 +217,9 @@ ${text.trim()}
 	});
 
 	eleventyConfig.addFilter("toSearchEntry", function(str) {
-		return str.replace(/<a class="direct-link"[^>]*>#<\/a\>/g, "");
+		return str.replace(/<a class="direct-link"[^>]*>#<\/a\>/g, "")
+			.replace(/[\t]{2,}/g, "\t") // change \t\t\t\t\t\t to \t
+			.replace(/[\n]{2,}/g, "\n"); // change \n\n\n\n\n to \n
 	});
 
 	eleventyConfig.addFilter("humanReadableNum", function(num) {
@@ -564,74 +583,6 @@ ${text.trim()}
 
 		return html.join("");
 	});
-
-	// Start of Eleventy Cloud plugin!
-	function getNodeModulesList(files) {
-		let pkgs = new Set();
-
-		let globalJsDataFiles = files.filter(entry => entry.endsWith(".js"));
-
-		for(let filepath of globalJsDataFiles) {
-			let modules = dependencyTree(filepath, {
-				nodeModuleNamesOnly: true
-			});
-
-			for(let name of modules) {
-				pkgs.add(name)
-			}
-		}
-
-		return Array.from(pkgs).sort();
-	}
-
-	if(!process.env.ELEVENTY_CLOUD) {
-		// eleventyConfig.on("collections", (collections) => {
-		// 	console.log( "Saving build-time `collections` for serverless reuse." );
-		// 	let names = ["sidebarNav", "all"];
-		// 	let saved = {};
-		// 	for(let name of names) {
-		// 		saved[name] = collections[name];
-		// 	}
-		// 	let filename = `./netlify/functions/cloud/serverless-collections.json`;
-		// 	fs.writeFileSync(filename, JSON.stringify(saved, null, 2));
-		// 	console.log( `Writing ${filename}.` );
-		// });
-
-		eleventyConfig.on("globalDataFiles", (fileList) => {
-			let modules = getNodeModulesList([__filename, ...fileList]).map(name => `require("${name}");`);
-			if(modules.length) {
-				let filename = "./netlify/functions/cloud/serverless-required-modules.js";
-				fs.writeFileSync(filename, modules.join("\n"));
-				console.log( `Eleventy Cloud, writing (×${modules.length}): ${filename}` );
-			}
-		});
-
-		eleventyConfig.on("dependencyMap", (templateMap) => {
-			let outputMap = {};
-			let redirects = ["# These were generated by Eleventy Cloud"];
-
-			for(let entry of templateMap) {
-				if(entry.isExternal) {
-					outputMap[entry.url] = entry.inputPath;
-
-					redirects.push(`${entry.url} /.netlify/functions/cloud 200!`)
-				}
-			}
-
-			let mapEntryCount = Object.keys(outputMap).length;
-			if(mapEntryCount > 0) {
-				let mapFilename = "./netlify/functions/cloud/map.json";
-				fs.writeFileSync(mapFilename, JSON.stringify(outputMap, null, 2));
-				console.log( `Eleventy Cloud, writing (×${mapEntryCount}): ${mapFilename}` );
-			}
-
-			if(redirects.length > 1) {
-				let redirectsFilename = "./_site/_redirects";
-				fs.writeFileSync(redirectsFilename, redirects.join("\n"));
-				console.log( `Eleventy Cloud, writing (×${redirects.length}): ${redirectsFilename}` );
-			}
-		});
-	} // end of Eleventy Cloud plugin
 
 	return {
 		dir: {
