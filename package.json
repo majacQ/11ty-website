@@ -82,6 +82,6 @@
     "@11ty/logo": "2.0.4",
     "lodash": "^4.17.21",
     "prismjs": "1.23.0",
-    "speedlify-score": "^2.0.2"
+    "speedlify-score": "^3.0.0"
   }
 }
